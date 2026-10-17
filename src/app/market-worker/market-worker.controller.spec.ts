@@ -20,6 +20,16 @@ const TEST_UPDATES: GeneratedUpdate[] = [
   },
 ];
 
+const EXPECTED_SUMMARY = {
+  ALFA: {
+    lastPriceCents: 10000,
+    bidAskSpreadCents: 20,
+    tradingVolume: 5,
+    vwapCents: 10000,
+    orderBookImbalance: -5 / 45,
+  },
+};
+
 const createStartMessage = (
   runId: number,
   options: Partial<{
@@ -91,7 +101,39 @@ describe('MarketWorkerController', () => {
     expect(emitMessageFn).toHaveBeenCalledWith({
       type: 'BATCH_UPDATE',
       runId: 8,
-      updates: TEST_UPDATES,
+      instrumentsSummary: EXPECTED_SUMMARY,
+    });
+  });
+
+  it('accumulates volume and VWAP across all updates in the run', async () => {
+    const secondUpdate: GeneratedUpdate = {
+      ...TEST_UPDATES[0],
+      priceCents: 12000,
+      tradeQuantity: 3,
+      bidQuantity: 30,
+      askQuantity: 10,
+    };
+    generateUpdatesSpy
+      .mockReturnValueOnce(TEST_UPDATES)
+      .mockReturnValueOnce([secondUpdate]);
+    await controller.handleMessage(
+      createStartMessage(10, { batchIntervalMs: 100 }),
+    );
+
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(emitMessageFn).toHaveBeenNthCalledWith(2, {
+      type: 'BATCH_UPDATE',
+      runId: 10,
+      instrumentsSummary: {
+        ALFA: {
+          lastPriceCents: 12000,
+          bidAskSpreadCents: 20,
+          tradingVolume: 8,
+          vwapCents: 10750,
+          orderBookImbalance: 0.5,
+        },
+      },
     });
   });
 
@@ -126,7 +168,15 @@ describe('MarketWorkerController', () => {
     expect(emitMessageFn).toHaveBeenCalledWith({
       type: 'BATCH_UPDATE',
       runId: 4,
-      updates: TEST_UPDATES,
+      instrumentsSummary: {
+        ALFA: {
+          lastPriceCents: 10000,
+          bidAskSpreadCents: 20,
+          tradingVolume: 10,
+          vwapCents: 10000,
+          orderBookImbalance: -5 / 45,
+        },
+      },
     });
   });
 
@@ -160,6 +210,35 @@ describe('MarketWorkerController', () => {
     expect(generatorFactory).toHaveBeenCalledOnce();
     expect(initSpy.mock.calls).toEqual([[3], [8]]);
     expect(vi.getTimerCount()).toBe(1);
+  });
+
+  it('resets accumulated volume when a new run starts', async () => {
+    const secondRunUpdate: GeneratedUpdate = {
+      ...TEST_UPDATES[0],
+      priceCents: 12000,
+      tradeQuantity: 2,
+    };
+    generateUpdatesSpy
+      .mockReturnValueOnce(TEST_UPDATES)
+      .mockReturnValueOnce([secondRunUpdate]);
+    await controller.handleMessage(createStartMessage(11));
+    await vi.advanceTimersByTimeAsync(100);
+    await controller.handleMessage(createStartMessage(12));
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(emitMessageFn).toHaveBeenLastCalledWith({
+      type: 'BATCH_UPDATE',
+      runId: 12,
+      instrumentsSummary: {
+        ALFA: {
+          lastPriceCents: 12000,
+          bidAskSpreadCents: 20,
+          tradingVolume: 2,
+          vwapCents: 12000,
+          orderBookImbalance: -5 / 45,
+        },
+      },
+    });
   });
 
   it('emits an ERROR with the current runId when the factory rejects', async () => {

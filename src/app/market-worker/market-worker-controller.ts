@@ -1,3 +1,4 @@
+import { InstrumentsSummaryCalculator } from './instruments-summary-calculator';
 import { createWasmGeneratorFactory } from './wasm-market-generator-factory';
 import type {
   GeneratorFactory,
@@ -12,6 +13,7 @@ export class MarketWorkerController {
   private timerId: ReturnType<typeof setInterval> | null = null;
   private generator: IMarketGenerator | null = null;
   private runSettings: RunSettings | null = null;
+  private readonly summaryCalculator = new InstrumentsSummaryCalculator();
   private paused = true;
   private operationId = 0;
 
@@ -31,6 +33,7 @@ export class MarketWorkerController {
           updatesPerBatch: message.updatesPerBatch,
           batchIntervalMs: message.batchIntervalMs,
         };
+        this.summaryCalculator.reset();
         this.paused = false;
         await this.startRun(++this.operationId, true);
         break;
@@ -54,6 +57,7 @@ export class MarketWorkerController {
         this.stopTimer();
         this.currentRunId = 0;
         this.runSettings = null;
+        this.summaryCalculator.reset();
         break;
     }
   }
@@ -91,10 +95,16 @@ export class MarketWorkerController {
     this.stopTimer();
     this.timerId = setInterval(() => {
       try {
+        const generatedUpdates = generator.generateUpdates(
+          settings.updatesPerBatch,
+        );
+        const instrumentsSummary =
+          this.summaryCalculator.calculate(generatedUpdates);
+
         this.emitMessageFn({
           type: 'BATCH_UPDATE',
           runId: this.currentRunId,
-          updates: generator.generateUpdates(settings.updatesPerBatch),
+          instrumentsSummary,
         });
       } catch (error) {
         this.stopTimer();

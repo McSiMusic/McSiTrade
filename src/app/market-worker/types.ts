@@ -5,6 +5,19 @@ export interface IMarketGenerator {
   generateUpdates(batchSize: number): GeneratedUpdate[];
 }
 
+export interface InstrumentAccumulator {
+  totalVolume: number;
+  totalVolumePrice: number;
+}
+
+export interface InstrumentSummary {
+  lastPriceCents: number;
+  bidAskSpreadCents: number;
+  tradingVolume: number;
+  vwapCents: number | 'unknown';
+  orderBookImbalance: number | 'unknown';
+}
+
 export type GeneratorFactory = () => Promise<IMarketGenerator>;
 
 export interface WasmGeneratorExports extends WebAssembly.Exports {
@@ -29,7 +42,11 @@ export type WorkerCommand =
   | { type: 'RESET' };
 
 export type WorkerResponse =
-  | { type: 'BATCH_UPDATE'; runId: number; updates: GeneratedUpdate[] }
+  | {
+      type: 'BATCH_UPDATE';
+      runId: number;
+      instrumentsSummary: Record<string, InstrumentSummary>;
+    }
   | { type: 'ERROR'; runId: number; message: string };
 
 export type RunSettings = Pick<
