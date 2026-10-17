@@ -46,3 +46,6 @@ Thumbs.db
 # Compiled WebAssembly artifacts
 public/*.wasm
 public/*.wat
+public/*.wasm.map
+public/*.js
+public/*.d.ts
