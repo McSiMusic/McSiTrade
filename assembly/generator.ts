@@ -1,5 +1,6 @@
 const MAX_INSTRUMENTS: i32 = 50;
-const MAX_UPDATES: i32 = 10000;
+const MAX_UPDATES: i32 = 1000;
+const MIN_PRICE_CENTS: i32 = 1000;
 const BID_OFFSET: i32 = 100;
 const ASK_OFFSET: i32 = 100;
 const MAX_BID_ASK_QUANTITY: i32 = 500;
@@ -63,7 +64,7 @@ export function generate(updatesCount: i32): string {
     let bidOffset = i32(Math.floor(Math.random() * BID_OFFSET)) + 1;
     let askOffset = i32(Math.floor(Math.random() * ASK_OFFSET)) + 1;
 
-    let bidCents = currentInstrument.priceCents - bidOffset;
+    let bidCents = max(currentInstrument.priceCents - bidOffset, MIN_PRICE_CENTS);
     let askCents = currentInstrument.priceCents + askOffset;
 
     let isBuy = Math.random() > 0.5;

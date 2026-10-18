@@ -49,14 +49,20 @@ describe("AssemblyScript generator wasm", () => {
 
   it("aborts when generating fewer than one update", () => {
     expect(() => generate(0)).toThrow(
-      "Invalid number of updates. Must be between 1 and 10000.",
+      "Invalid number of updates. Must be between 1 and 1000.",
     );
   });
 
-  it("aborts when generating more than 10,000 updates", () => {
-    expect(() => generate(10001)).toThrow(
-      "Invalid number of updates. Must be between 1 and 10000.",
+  it("aborts when generating more than 1,000 updates", () => {
+    expect(() => generate(1001)).toThrow(
+      "Invalid number of updates. Must be between 1 and 1000.",
     );
+  });
+
+  it("generates 1,000 updates in one batch", () => {
+    generator.reset(1);
+
+    expect(JSON.parse(generate(1000))).toHaveLength(1000);
   });
 
   it("initializes instruments and generates valid updates", () => {
@@ -109,5 +115,23 @@ describe("AssemblyScript generator wasm", () => {
 
     expect(currentUpdate.bidCents).toBeLessThanOrEqual(previousUpdate.priceCents);
     expect(previousUpdate.priceCents).toBeLessThanOrEqual(currentUpdate.askCents);
+  });
+
+  it("keeps generated prices at or above $10 at the lower price boundary", async () => {
+    const seededInstance = await instantiate<GeneratorWasmExports>(wasmModule, {
+      env: { seed: () => 1 },
+    });
+    generator = seededInstance.exports;
+    generator.reset(1);
+
+    let minimumPrice = Number.POSITIVE_INFINITY;
+    for (let batch = 0; batch < 100; batch++) {
+      const updates: GeneratedUpdate[] = JSON.parse(generate(1000));
+      for (const update of updates) {
+        minimumPrice = Math.min(minimumPrice, update.priceCents, update.bidCents);
+      }
+    }
+
+    expect(minimumPrice).toBe(1000);
   });
 });

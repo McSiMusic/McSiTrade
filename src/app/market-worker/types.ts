@@ -21,10 +21,9 @@ export interface InstrumentSummary {
 export type GeneratorFactory = () => Promise<IMarketGenerator>;
 
 export interface WasmGeneratorExports extends WebAssembly.Exports {
-  init(instrumentCount: number): void;
-  generateBatchJson(batchSize: number): number;
   __getString(pointer: number): string;
-  __setString(pointer: number, value: string): void;
+  reset(instrumentCount: number): void;
+  generate(batchSize: number): number;
 }
 
 export type StartMessage = {
@@ -36,17 +35,15 @@ export type StartMessage = {
 };
 
 export type WorkerCommand =
-  | StartMessage
-  | { type: 'PAUSE' }
-  | { type: 'RESUME' }
-  | { type: 'RESET' };
+  StartMessage | { type: 'PAUSE' } | { type: 'RESUME' } | { type: 'RESET' };
 
 export type WorkerResponse =
   | {
       type: 'BATCH_UPDATE';
       runId: number;
-      instrumentsSummary: Record<string, InstrumentSummary>;
+      instrumentsSummary: ReadonlyMap<string, InstrumentSummary>;
     }
+  | { type: 'WORKER_STATUS'; runId: number; status: 'RUNNING' | 'PAUSED' }
   | { type: 'ERROR'; runId: number; message: string };
 
 export type RunSettings = Pick<

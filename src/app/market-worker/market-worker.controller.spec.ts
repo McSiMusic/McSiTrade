@@ -1,11 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MarketWorkerController } from './market-worker-controller';
-import type {
-  GeneratorFactory,
-  IMarketGenerator,
-  WorkerCommand,
-  WorkerResponse,
-} from './types';
+import type { GeneratorFactory, IMarketGenerator, WorkerCommand, WorkerResponse } from './types';
 import type { GeneratedUpdate } from '../../types';
 
 const TEST_UPDATES: GeneratedUpdate[] = [
@@ -29,6 +24,9 @@ const EXPECTED_SUMMARY = {
     orderBookImbalance: -5 / 45,
   },
 };
+const EXPECTED_SUMMARY_MAP = new Map(Object.entries(EXPECTED_SUMMARY));
+const summaryMap = (summary: Record<string, object>) =>
+  new Map(Object.entries(summary));
 
 const createStartMessage = (
   runId: number,
@@ -45,27 +43,20 @@ const createStartMessage = (
   batchIntervalMs: options.batchIntervalMs ?? 100,
 });
 
-
 describe('MarketWorkerController', () => {
   let controller: MarketWorkerController;
   let generator: IMarketGenerator;
 
   let initSpy: ReturnType<typeof vi.fn<(instrumentCount: number) => void>>;
-  let generateUpdatesSpy: ReturnType<
-    typeof vi.fn<(batchSize: number) => GeneratedUpdate[]>
-  >;
-  let emitMessageFn: ReturnType<
-    typeof vi.fn<(message: WorkerResponse) => void>
-  >;
+  let generateUpdatesSpy: ReturnType<typeof vi.fn<(batchSize: number) => GeneratedUpdate[]>>;
+  let emitMessageFn: ReturnType<typeof vi.fn<(message: WorkerResponse) => void>>;
   let generatorFactory: ReturnType<typeof vi.fn<GeneratorFactory>>;
 
   beforeEach(() => {
     vi.useFakeTimers();
 
     initSpy = vi.fn<(instrumentCount: number) => void>();
-    generateUpdatesSpy = vi.fn(
-      (_batchSize: number): GeneratedUpdate[] => TEST_UPDATES,
-    );
+    generateUpdatesSpy = vi.fn((_batchSize: number): GeneratedUpdate[] => TEST_UPDATES);
     generator = {
       init: initSpy,
       generateUpdates: generateUpdatesSpy,
@@ -101,7 +92,7 @@ describe('MarketWorkerController', () => {
     expect(emitMessageFn).toHaveBeenCalledWith({
       type: 'BATCH_UPDATE',
       runId: 8,
-      instrumentsSummary: EXPECTED_SUMMARY,
+      instrumentsSummary: EXPECTED_SUMMARY_MAP,
     });
   });
 
@@ -113,19 +104,19 @@ describe('MarketWorkerController', () => {
       bidQuantity: 30,
       askQuantity: 10,
     };
-    generateUpdatesSpy
-      .mockReturnValueOnce(TEST_UPDATES)
-      .mockReturnValueOnce([secondUpdate]);
-    await controller.handleMessage(
-      createStartMessage(10, { batchIntervalMs: 100 }),
-    );
+    generateUpdatesSpy.mockReturnValueOnce(TEST_UPDATES).mockReturnValueOnce([secondUpdate]);
+    await controller.handleMessage(createStartMessage(10, { batchIntervalMs: 100 }));
 
     await vi.advanceTimersByTimeAsync(200);
 
-    expect(emitMessageFn).toHaveBeenNthCalledWith(2, {
+    expect(
+      emitMessageFn.mock.calls
+        .map(([message]) => message)
+        .filter((message) => message.type === 'BATCH_UPDATE')[1],
+    ).toEqual({
       type: 'BATCH_UPDATE',
       runId: 10,
-      instrumentsSummary: {
+      instrumentsSummary: summaryMap({
         ALFA: {
           lastPriceCents: 12000,
           bidAskSpreadCents: 20,
@@ -133,7 +124,7 @@ describe('MarketWorkerController', () => {
           vwapCents: 10750,
           orderBookImbalance: 0.5,
         },
-      },
+      }),
     });
   });
 
@@ -146,7 +137,6 @@ describe('MarketWorkerController', () => {
     expect(vi.getTimerCount()).toBe(1);
   });
 
-
   it('PAUSE stops interval ticks and RESUME continues with the same settings', async () => {
     await controller.handleMessage(
       createStartMessage(4, { updatesPerBatch: 7, batchIntervalMs: 100 }),
@@ -157,7 +147,9 @@ describe('MarketWorkerController', () => {
     await controller.handleMessage({ type: 'PAUSE' });
     expect(vi.getTimerCount()).toBe(0);
     await vi.advanceTimersByTimeAsync(500);
-    expect(emitMessageFn).not.toHaveBeenCalled();
+    expect(emitMessageFn.mock.calls.some(([message]) => message.type === 'BATCH_UPDATE')).toBe(
+      false,
+    );
 
     await controller.handleMessage({ type: 'RESUME' });
     await vi.advanceTimersByTimeAsync(100);
@@ -168,7 +160,7 @@ describe('MarketWorkerController', () => {
     expect(emitMessageFn).toHaveBeenCalledWith({
       type: 'BATCH_UPDATE',
       runId: 4,
-      instrumentsSummary: {
+      instrumentsSummary: summaryMap({
         ALFA: {
           lastPriceCents: 10000,
           bidAskSpreadCents: 20,
@@ -176,14 +168,12 @@ describe('MarketWorkerController', () => {
           vwapCents: 10000,
           orderBookImbalance: -5 / 45,
         },
-      },
+      }),
     });
   });
 
   it('does nothing when RESUME arrives before START', async () => {
-    await expect(
-      controller.handleMessage({ type: 'RESUME' }),
-    ).resolves.toBeUndefined();
+    await expect(controller.handleMessage({ type: 'RESUME' })).resolves.toBeUndefined();
 
     expect(generatorFactory).not.toHaveBeenCalled();
     expect(vi.getTimerCount()).toBe(0);
@@ -199,7 +189,14 @@ describe('MarketWorkerController', () => {
     expect(vi.getTimerCount()).toBe(0);
     expect(generatorFactory).toHaveBeenCalledOnce();
     expect(generateUpdatesSpy).not.toHaveBeenCalled();
-    expect(emitMessageFn).not.toHaveBeenCalled();
+    expect(emitMessageFn).toHaveBeenCalledWith({
+      type: 'WORKER_STATUS',
+      runId: 0,
+      status: 'PAUSED',
+    });
+    expect(emitMessageFn.mock.calls.some(([message]) => message.type === 'BATCH_UPDATE')).toBe(
+      false,
+    );
   });
 
   it('reuses the existing generator after RESET and initializes it for the new run', async () => {
@@ -218,9 +215,7 @@ describe('MarketWorkerController', () => {
       priceCents: 12000,
       tradeQuantity: 2,
     };
-    generateUpdatesSpy
-      .mockReturnValueOnce(TEST_UPDATES)
-      .mockReturnValueOnce([secondRunUpdate]);
+    generateUpdatesSpy.mockReturnValueOnce(TEST_UPDATES).mockReturnValueOnce([secondRunUpdate]);
     await controller.handleMessage(createStartMessage(11));
     await vi.advanceTimersByTimeAsync(100);
     await controller.handleMessage(createStartMessage(12));
@@ -229,7 +224,7 @@ describe('MarketWorkerController', () => {
     expect(emitMessageFn).toHaveBeenLastCalledWith({
       type: 'BATCH_UPDATE',
       runId: 12,
-      instrumentsSummary: {
+      instrumentsSummary: summaryMap({
         ALFA: {
           lastPriceCents: 12000,
           bidAskSpreadCents: 20,
@@ -237,7 +232,7 @@ describe('MarketWorkerController', () => {
           vwapCents: 12000,
           orderBookImbalance: -5 / 45,
         },
-      },
+      }),
     });
   });
 

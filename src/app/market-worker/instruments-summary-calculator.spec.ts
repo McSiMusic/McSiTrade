@@ -4,6 +4,8 @@ import type { GeneratedUpdate } from '../../types';
 
 describe('InstrumentsSummaryCalculator', () => {
   let calculator: InstrumentsSummaryCalculator;
+  const asRecord = (summaries: ReadonlyMap<string, unknown>) =>
+    Object.fromEntries(summaries);
   const update: GeneratedUpdate = {
     instrument: 'ALFA',
     priceCents: 10500,
@@ -19,7 +21,7 @@ describe('InstrumentsSummaryCalculator', () => {
   });
 
   it('calculates summaries and retains accumulated volume between batches', () => {
-    expect(calculator.calculate([update])).toEqual({
+    expect(asRecord(calculator.calculate([update]))).toEqual({
       ALFA: {
         lastPriceCents: 10500,
         bidAskSpreadCents: 250,
@@ -37,13 +39,37 @@ describe('InstrumentsSummaryCalculator', () => {
       askQuantity: 30,
     };
 
-    expect(calculator.calculate([latestUpdate])).toEqual({
+    expect(asRecord(calculator.calculate([latestUpdate]))).toEqual({
       ALFA: {
         lastPriceCents: 11000,
         bidAskSpreadCents: 250,
         tradingVolume: 10,
         vwapCents: 10800,
         orderBookImbalance: -0.5,
+      },
+    });
+  });
+
+  it('keeps summaries for instruments that did not update in the latest batch', () => {
+    const betaUpdate = { ...update, instrument: 'BETA' };
+    calculator.calculate([update, betaUpdate]);
+
+    expect(
+      asRecord(calculator.calculate([{ ...update, priceCents: 11000 }])),
+    ).toEqual({
+      ALFA: {
+        lastPriceCents: 11000,
+        bidAskSpreadCents: 250,
+        tradingVolume: 8,
+        vwapCents: 10750,
+        orderBookImbalance: 0.5,
+      },
+      BETA: {
+        lastPriceCents: 10500,
+        bidAskSpreadCents: 250,
+        tradingVolume: 4,
+        vwapCents: 10500,
+        orderBookImbalance: 0.5,
       },
     });
   });
@@ -57,7 +83,7 @@ describe('InstrumentsSummaryCalculator', () => {
     };
 
     expect(
-      calculator.calculate([update, betaUpdate, latestAlphaUpdate]),
+      asRecord(calculator.calculate([update, betaUpdate, latestAlphaUpdate])),
     ).toEqual({
       ALFA: {
         lastPriceCents: 12000,
@@ -96,7 +122,7 @@ describe('InstrumentsSummaryCalculator', () => {
       askQuantity: 400,
     };
 
-    expect(calculator.calculate([firstTrade, secondTrade])).toEqual({
+    expect(asRecord(calculator.calculate([firstTrade, secondTrade]))).toEqual({
       ALFA: {
         lastPriceCents: 10200,
         bidAskSpreadCents: 4,
@@ -109,9 +135,9 @@ describe('InstrumentsSummaryCalculator', () => {
 
   it('returns unknown when VWAP or order book imbalance has a zero denominator', () => {
     expect(
-      calculator.calculate([
+      asRecord(calculator.calculate([
         { ...update, tradeQuantity: 0, bidQuantity: 0, askQuantity: 0 },
-      ]),
+      ])),
     ).toEqual({
       ALFA: {
         lastPriceCents: 10500,
@@ -127,7 +153,7 @@ describe('InstrumentsSummaryCalculator', () => {
     calculator.calculate([update]);
     calculator.reset();
 
-    expect(calculator.calculate([update])).toEqual({
+    expect(asRecord(calculator.calculate([update]))).toEqual({
       ALFA: {
         lastPriceCents: 10500,
         bidAskSpreadCents: 250,

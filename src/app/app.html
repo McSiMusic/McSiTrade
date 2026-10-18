@@ -1,1 +1,18 @@
-<router-outlet />
+<header class="app-header">
+  <div class="header-content">
+    <a class="brand" routerLink="/">
+      <span class="brand-mark" aria-hidden="true">M</span>
+      <span>McSiTrade</span>
+    </a>
+    <nav class="main-nav" aria-label="Main navigation">
+      <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }"
+        >Dashboard</a
+      >
+      <a routerLink="/settings" routerLinkActive="active">Settings</a>
+    </nav>
+  </div>
+</header>
+
+<main class="page-content">
+  <router-outlet />
+</main>

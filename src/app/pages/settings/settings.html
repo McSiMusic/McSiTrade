@@ -1,1 +1,77 @@
-<p>settings works!</p>
+<section class="settings-card" aria-labelledby="settings-title">
+  <div class="section-heading">
+    <div>
+      <p class="subtitle">Configure the next market run</p>
+      <h1 id="settings-title">Settings</h1>
+    </div>
+  </div>
+
+  @if (marketService.errorMessage(); as error) {
+    <div class="error-banner" role="alert">{{ error }}</div>
+  }
+
+  <form #settingsForm="ngForm" (ngSubmit)="applySettings()">
+    <div class="form-grid">
+      <label class="field">
+        <span class="field-label"
+          >Instrument count ({{ limits.minInstruments }}–{{ limits.maxInstruments }})</span
+        >
+        <input
+          type="number"
+          name="instrumentCount"
+          [(ngModel)]="instrumentCount"
+          [min]="limits.minInstruments"
+          [max]="limits.maxInstruments"
+          step="1"
+          required
+        />
+        <span class="field-hint">Number of fictional assets to trade</span>
+      </label>
+
+      <label class="field">
+        <span class="field-label"
+          >Updates per batch ({{ limits.minUpdates }}–{{ limits.maxUpdates }})</span
+        >
+        <input
+          type="number"
+          name="updatesPerBatch"
+          [(ngModel)]="updatesPerBatch"
+          [min]="limits.minUpdates"
+          [max]="limits.maxUpdates"
+          step="1"
+          required
+        />
+        <span class="field-hint">Updates generated in a single WASM run</span>
+      </label>
+
+      <label class="field field-wide">
+        <span class="field-label"
+          >Batch interval ({{ limits.minInterval }}–{{ limits.maxInterval }} ms)</span
+        >
+        <input
+          type="number"
+          name="batchIntervalMs"
+          [(ngModel)]="batchIntervalMs"
+          [min]="limits.minInterval"
+          [max]="limits.maxInterval"
+          step="1"
+          required
+        />
+        <span class="field-hint">
+          Nominal rate: {{ updatesPerBatch / (batchIntervalMs / 1000) | number: '1.0-0' }} updates /
+          sec
+        </span>
+      </label>
+    </div>
+
+    <div class="form-actions">
+      <button
+        class="primary-button"
+        type="submit"
+        [disabled]="settingsForm.invalid"
+      >
+        Apply &amp; Reset Run
+      </button>
+    </div>
+  </form>
+</section>

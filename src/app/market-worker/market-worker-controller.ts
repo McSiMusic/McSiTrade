@@ -19,8 +19,7 @@ export class MarketWorkerController {
 
   constructor(
     private readonly emitMessageFn: (message: WorkerResponse) => void,
-    private readonly generatorFactory: GeneratorFactory =
-      createWasmGeneratorFactory(),
+    private readonly generatorFactory: GeneratorFactory = createWasmGeneratorFactory(),
   ) {}
 
   async handleMessage(message: WorkerCommand): Promise<void> {
@@ -42,6 +41,7 @@ export class MarketWorkerController {
         this.paused = true;
         this.operationId++;
         this.stopTimer();
+        this.emitStatus('PAUSED');
         break;
 
       case 'RESUME':
@@ -58,16 +58,15 @@ export class MarketWorkerController {
         this.currentRunId = 0;
         this.runSettings = null;
         this.summaryCalculator.reset();
+        this.emitStatus('PAUSED');
         break;
     }
   }
 
-  private async startRun(
-    operationId: number,
-    initializeGenerator: boolean,
-  ): Promise<void> {
+  private async startRun(operationId: number, initializeGenerator: boolean): Promise<void> {
     try {
-      const isStartRestricted = () => operationId !== this.operationId || this.paused || this.runSettings === null;
+      const isStartRestricted = () =>
+        operationId !== this.operationId || this.paused || this.runSettings === null;
       if (isStartRestricted()) return;
 
       const generator = this.generator ?? (await this.generatorFactory());
@@ -80,6 +79,7 @@ export class MarketWorkerController {
       }
 
       this.startTimer(generator, this.runSettings!);
+      this.emitStatus('RUNNING');
     } catch (error) {
       if (operationId === this.operationId) {
         this.stopTimer();
@@ -88,18 +88,12 @@ export class MarketWorkerController {
     }
   }
 
-  private startTimer(
-    generator: IMarketGenerator,
-    settings: RunSettings,
-  ): void {
+  private startTimer(generator: IMarketGenerator, settings: RunSettings): void {
     this.stopTimer();
     this.timerId = setInterval(() => {
       try {
-        const generatedUpdates = generator.generateUpdates(
-          settings.updatesPerBatch,
-        );
-        const instrumentsSummary =
-          this.summaryCalculator.calculate(generatedUpdates);
+        const generatedUpdates = generator.generateUpdates(settings.updatesPerBatch);
+        const instrumentsSummary = this.summaryCalculator.calculate(generatedUpdates);
 
         this.emitMessageFn({
           type: 'BATCH_UPDATE',
@@ -108,6 +102,7 @@ export class MarketWorkerController {
         });
       } catch (error) {
         this.stopTimer();
+        this.paused = true;
         this.emitError(error);
       }
     }, settings.batchIntervalMs);
@@ -125,6 +120,14 @@ export class MarketWorkerController {
       type: 'ERROR',
       runId: this.currentRunId,
       message: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  private emitStatus(status: 'RUNNING' | 'PAUSED'): void {
+    this.emitMessageFn({
+      type: 'WORKER_STATUS',
+      runId: this.currentRunId,
+      status,
     });
   }
 }

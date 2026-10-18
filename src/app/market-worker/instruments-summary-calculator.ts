@@ -3,12 +3,11 @@ import type { InstrumentAccumulator, InstrumentSummary } from './types';
 
 export class InstrumentsSummaryCalculator {
   private readonly accumulators = new Map<string, InstrumentAccumulator>();
+  private readonly latestSummaries = new Map<string, InstrumentSummary>();
 
   calculate(
     generatedUpdates: GeneratedUpdate[],
-  ): Record<string, InstrumentSummary> {
-    const summaries: Record<string, InstrumentSummary> = {};
-
+  ): ReadonlyMap<string, InstrumentSummary> {
     for (const update of generatedUpdates) {
       let accumulator = this.accumulators.get(update.instrument);
       if (accumulator === undefined) {
@@ -20,7 +19,7 @@ export class InstrumentsSummaryCalculator {
       accumulator.totalVolumePrice += update.priceCents * update.tradeQuantity;
 
       const orderBookQuantity = update.bidQuantity + update.askQuantity;
-      summaries[update.instrument] = {
+      this.latestSummaries.set(update.instrument, {
         lastPriceCents: update.priceCents,
         bidAskSpreadCents: update.askCents - update.bidCents,
         tradingVolume: accumulator.totalVolume,
@@ -32,13 +31,14 @@ export class InstrumentsSummaryCalculator {
           orderBookQuantity === 0
             ? 'unknown'
             : (update.bidQuantity - update.askQuantity) / orderBookQuantity,
-      };
+      });
     }
 
-    return summaries;
+    return this.latestSummaries;
   }
 
   reset(): void {
     this.accumulators.clear();
+    this.latestSummaries.clear();
   }
 }

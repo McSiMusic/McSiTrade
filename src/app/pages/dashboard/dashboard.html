@@ -1,1 +1,88 @@
-<p>dashboard works!</p>
+<section class="dashboard-card" aria-labelledby="dashboard-title">
+  <div class="section-heading">
+    <div>
+      <p class="subtitle">Track prices, volume and order-book activity in real time.</p>
+      <h1 id="dashboard-title">Instrument monitor</h1>
+    </div>
+    <span class="instrument-count">{{ marketService.instruments().length }} instruments</span>
+  </div>
+
+  @if (marketService.errorMessage(); as error) {
+    <div class="error-banner" role="alert">{{ error }}</div>
+  }
+
+  <div class="status-bar">
+    <div class="status-description">
+      <span class="status-label">Status</span>
+      <span class="status-pill" [class.running]="marketService.isRunning()">
+        <span class="status-dot"></span>
+        {{ marketService.isRunning() ? 'RUNNING' : 'PAUSED' }}
+      </span>
+    </div>
+
+    <button
+      class="primary-button run-button"
+      type="button"
+      (click)="marketService.toggleRun()"
+    >
+      {{ marketService.isRunning() ? 'PAUSE' : 'RESUME' }}
+    </button>
+  </div>
+
+  <div class="table-frame">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Instrument</th>
+          <th scope="col">Last traded price</th>
+          <th scope="col">Bid-ask spread</th>
+          <th scope="col">Trading volume</th>
+          <th scope="col">VWAP</th>
+          <th scope="col">Order-book imbalance</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (symbol of marketService.instruments(); track symbol) {
+          @let summary = marketService.summaries().get(symbol);
+          <tr>
+            <th scope="row">{{ symbol }}</th>
+            <td>{{ summary?.lastPriceCents | formatCents }}</td>
+            <td>{{ summary?.bidAskSpreadCents | formatCents }}</td>
+            <td>{{ summary?.tradingVolume | formatVolume }}</td>
+            <td>{{ summary?.vwapCents | formatCents }}</td>
+            <td
+              class="imbalance"
+              [class.positive]="
+                summary &&
+                summary.orderBookImbalance !== 'unknown' &&
+                summary.orderBookImbalance > 0
+              "
+              [class.negative]="
+                summary &&
+                summary.orderBookImbalance !== 'unknown' &&
+                summary.orderBookImbalance < 0
+              "
+            >
+              {{ summary?.orderBookImbalance | formatPercent }}
+            </td>
+          </tr>
+        } @empty {
+          <tr>
+            <td class="empty-state" colspan="6">
+              @if (marketService.errorMessage()) {
+                Market data is unavailable.
+              } @else {
+                <span class="loading-state" role="status">
+                  <span class="loading-spinner" aria-hidden="true"></span>
+                  Loading market data...
+                </span>
+              }
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+
+  <p class="table-note">Market values are refreshed at most once per second.</p>
+</section>
