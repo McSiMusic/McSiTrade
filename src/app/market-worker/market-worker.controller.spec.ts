@@ -147,6 +147,7 @@ describe('MarketWorkerController', () => {
     await controller.handleMessage({ type: 'PAUSE' });
     expect(vi.getTimerCount()).toBe(0);
     await vi.advanceTimersByTimeAsync(500);
+    expect(generateUpdatesSpy).toHaveBeenCalledOnce();
     expect(emitMessageFn.mock.calls.some(([message]) => message.type === 'BATCH_UPDATE')).toBe(
       false,
     );

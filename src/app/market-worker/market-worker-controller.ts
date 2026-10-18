@@ -91,6 +91,8 @@ export class MarketWorkerController {
   private startTimer(generator: IMarketGenerator, settings: RunSettings): void {
     this.stopTimer();
     this.timerId = setInterval(() => {
+      if (this.paused) return;
+
       try {
         const generatedUpdates = generator.generateUpdates(settings.updatesPerBatch);
         const instrumentsSummary = this.summaryCalculator.calculate(generatedUpdates);
