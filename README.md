@@ -1,59 +1,126 @@
-# Mcsitrade
+# McSiTrade
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 22.2.3.
+McSiTrade is a small real-time market dashboard. An AssemblyScript WebAssembly
+module generates simulated trades in a Web Worker, and an Angular application
+displays the resulting market data.
 
-## Development server
+**Live demo:** [https://mcsimusic.github.io/McSiTrade/](https://mcsimusic.github.io/McSiTrade/)
 
-To start a local development server, run:
+## Architecture
 
-```bash
-ng serve
+```text
+Angular pages
+    ↕
+MarketDataService
+    ↕
+MarketWorkerAdapter ── Web Worker
+                           ├── MarketWorkerController
+                           ├── WasmMarketGenerator ── AssemblyScript WASM
+                           └── InstrumentsSummaryCalculator
 ```
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+- **Angular** provides the dashboard and settings pages. `MarketDataService`
+  owns the application state, starts and resets runs, and exposes signals to
+  the UI. `MarketWorkerAdapter` encapsulates the Worker and its RxJS message
+  streams. Batch updates are throttled before they reach the UI.
+- **Web Worker** keeps market generation and summary calculations off the UI
+  thread. `MarketWorkerController` handles start, pause, resume, reset, and
+  errors. It loads the WASM generator once, then reinitializes it when a new run
+  starts.
+- **AssemblyScript / WebAssembly** generates batches of simulated market
+  updates. Each update represents a trade and a bid/ask snapshot. Generator
+  randomness and price evolution run in WASM; instrument prices are maintained
+  between calls, and generated prices stay at or above $10.
+- **Summary calculation** happens in the Worker. It accumulates trade volume
+  and VWAP for each instrument for the current run and retains only each
+  instrument's latest summary, not the complete trade history.
 
-## Code scaffolding
+## Pages
 
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+### Dashboard
+
+The dashboard displays one row for each instrument received from the Worker:
+
+- Last traded price
+- Bid-ask spread
+- Cumulative trading volume
+- Cumulative volume-weighted average price (VWAP)
+- Latest order-book imbalance
+
+Prices are generated and calculated in integer cents, then formatted as USD
+for display. Imbalance is shown as a signed value between -1 and +1. The page
+also shows producer status, reports initialization errors, and provides a
+Pause/Resume control. Pausing stops generation; resuming continues the current
+run without resetting its totals.
+
+### Settings
+
+The settings page lets you configure the next run:
+
+| Setting | Default | Allowed range |
+| --- | ---: | ---: |
+| Instrument count | 5 | 1–50 |
+| Updates per batch | 100 | 1–1,000 |
+| Batch interval | 500 ms | 50–2,000 ms |
+
+Settings are validated as integers and are applied only when the form is
+submitted. Applying settings starts a new run, clears the previous run's
+summaries and totals, and navigates back to the dashboard.
+
+## Requirements
+
+- Node.js 22.22.3 or a compatible version supported by Angular CLI 22
+- npm
+
+## Run locally
+
+Install dependencies and compile the WASM module:
 
 ```bash
-ng generate component component-name
+npm ci
+npm run build:wasm
 ```
 
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
+Start the Angular development server:
 
 ```bash
-ng generate --help
+npm start
 ```
 
-## Building
+Open [http://localhost:4200/](http://localhost:4200/) in a browser.
 
-To build the project run:
+## Build
+
+Build the optimized AssemblyScript WebAssembly module and the Angular
+application:
 
 ```bash
-ng build
+npm run build:wasm
+npm run build
 ```
 
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
+Angular build output is written to `dist/mcsitrade/browser`.
 
-## Running unit tests
+## Tests
 
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
+The default Angular test configuration includes both the application unit
+tests and `test/generator.spec.ts`. Build the WASM module before running the
+full suite:
 
 ```bash
-ng test
+npm run build:wasm
+npm test -- --watch=false
 ```
 
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
+To build the WASM module and run only its generator tests:
 
 ```bash
-ng e2e
+npm run test:generator
 ```
 
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
+## Deployment
 
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+The GitHub Actions workflow in `.github/workflows/deploy.yml` builds the WASM
+module, runs the test suite, builds the Angular app with the repository's
+GitHub Pages base path, and deploys it to GitHub Pages when changes are pushed
+to `main`.
